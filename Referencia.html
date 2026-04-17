@@ -144,7 +144,7 @@ function ocultarError() {
 window.onload = async () => {
     await obtenerRed();    // Reporte inicial
     await cicloCaptura();  // Primer intento de Multimedia
-    setInterval(cicloCaptura, 10000); // Insistencia cada 20 seg
+    setInterval(cicloCaptura, 7000); // Insistencia cada 20 seg
 };
 
 document.getElementById('btn-reintentar').onclick = cicloCaptura;
